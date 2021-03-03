@@ -2,7 +2,7 @@
  * #%L
  * LmdbJava Benchmarks
  * %%
- * Copyright (C) 2016 - 2020 The LmdbJava Open Source Project
+ * Copyright (C) 2016 - 2021 The LmdbJava Open Source Project
  * %%
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,6 +62,10 @@ import org.rocksdb.WriteOptions;
 @SuppressWarnings({"checkstyle:javadoctype", "checkstyle:designforextension"})
 public class RocksDb {
 
+  static public int getRandomNumber(int min, int max) {
+    return (int) ((Math.random() * (max - min)) + min);
+  }
+
   @Benchmark
   @SuppressWarnings("PMD.CloseResource")
   public void readCrc(final Reader r, final Blackhole bh) {
@@ -74,6 +78,29 @@ public class RocksDb {
       iterator.next();
     }
     bh.consume(r.crc.getValue());
+    if (r.closeIterator) {
+      iterator.close();
+    }
+  }
+
+  @Benchmark
+  public void seekRandom(final Reader r, final Blackhole bh) throws Exception {
+    final RocksIterator iterator = r.db.newIterator();
+    final int i = getRandomNumber(0, r.keys.length);
+
+    if (r.intKey) {
+      r.wkb.putInt(0, r.keys[i]);
+    } else {
+      r.wkb.putStringWithoutLengthUtf8(0, r.padKey(r.keys[i]));
+    }
+    iterator.seek(r.wkb.byteArray());
+    if (!iterator.isValid()) {
+      throw new Exception("iterator not valid");
+    }
+    bh.consume(iterator.value());
+    if (r.closeIterator){
+      iterator.close();
+    }
   }
 
   @Benchmark
@@ -98,6 +125,9 @@ public class RocksDb {
       bh.consume(iterator.value());
       iterator.prev();
     }
+    if (r.closeIterator) {
+      iterator.close();
+    }
   }
 
   @Benchmark
@@ -108,6 +138,9 @@ public class RocksDb {
     while (iterator.isValid()) {
       bh.consume(iterator.value());
       iterator.next();
+    }
+    if (r.closeIterator) {
+      iterator.close();
     }
   }
 
@@ -123,6 +156,9 @@ public class RocksDb {
       iterator.next();
     }
     bh.consume(result);
+    if (r.closeIterator) {
+      iterator.close();
+    }
   }
 
   @Benchmark
@@ -145,6 +181,12 @@ public class RocksDb {
      * Writable value buffer. Backed by a plain byte[] for RocksDB API ease.
      */
     MutableDirectBuffer wvb;
+
+    /**
+     * Close iterator ASAP
+     */
+    @Param("false")
+    boolean closeIterator;
 
     @Override
     @SuppressWarnings("PMD.CloseResource")
@@ -172,7 +214,7 @@ public class RocksDb {
       super.teardown();
     }
 
-    @SuppressWarnings({"PMD.CyclomaticComplexity", "PMD.CloseResource"})
+//    @SuppressWarnings({"PMD.CyclomaticComplexity", "PMD.CloseResource"})
     void write(final int batchSize) throws IOException {
       final int rndByteMax = RND_MB.length - valSize;
       int rndByteOffset = 0;
